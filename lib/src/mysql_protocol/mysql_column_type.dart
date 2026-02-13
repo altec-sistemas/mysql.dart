@@ -4,7 +4,6 @@ import 'package:tuple/tuple.dart';
 import 'package:mysql_dart/exception.dart';
 import 'package:mysql_dart/mysql_protocol_extension.dart';
 
-/// Constantes que representam os tipos de coluna do MySQL conforme o protocolo.
 const mysqlColumnTypeDecimal = 0x00;
 const mysqlColumnTypeTiny = 0x01;
 const mysqlColumnTypeShort = 0x02;
@@ -18,17 +17,14 @@ const mysqlColumnTypeInt24 = 0x09;
 const mysqlColumnTypeDate = 0x0a;
 const mysqlColumnTypeTime = 0x0b;
 const mysqlColumnTypeDateTime = 0x0c;
-const mysqlColumnTypeYear = 0x0d; // 13 decimal
+const mysqlColumnTypeYear = 0x0d;
 const mysqlColumnTypeNewDate = 0x0e;
 const mysqlColumnTypeVarChar = 0x0f;
 const mysqlColumnTypeBit = 0x10;
 const mysqlColumnTypeTimestamp2 = 0x11;
 const mysqlColumnTypeDateTime2 = 0x12;
 const mysqlColumnTypeTime2 = 0x13;
-
-/// A partir do MySQL 5.7, colunas JSON podem ser reportadas como 0xf5
 const mysqlColumnTypeJson = 0xf5;
-
 const mysqlColumnTypeNewDecimal = 0xf6;
 const mysqlColumnTypeEnum = 0xf7;
 const mysqlColumnTypeSet = 0xf8;
@@ -40,24 +36,15 @@ const mysqlColumnTypeVarString = 0xfd;
 const mysqlColumnTypeString = 0xfe;
 const mysqlColumnTypeGeometry = 0xff;
 
-/// Representa o tipo de uma coluna no MySQL.
-///
-/// Essa classe encapsula o valor numérico que identifica o tipo de coluna
-/// e fornece métodos para converter valores lidos do MySQL para tipos Dart,
-/// além de determinar o melhor tipo Dart para representar os dados.
 class MySQLColumnType {
   final int _value;
 
-  /// Construtor privado que define o valor interno.
   const MySQLColumnType._(int value) : _value = value;
 
-  /// Cria uma instância de [MySQLColumnType] a partir de um valor inteiro.
   factory MySQLColumnType.create(int value) => MySQLColumnType._(value);
 
-  /// Retorna o valor inteiro interno que representa o tipo.
   int get intVal => _value;
 
-  // Constantes para cada tipo de coluna (mapeadas às acima)
   static const decimalType = MySQLColumnType._(mysqlColumnTypeDecimal);
   static const tinyType = MySQLColumnType._(mysqlColumnTypeTiny);
   static const shortType = MySQLColumnType._(mysqlColumnTypeShort);
@@ -78,10 +65,7 @@ class MySQLColumnType {
   static const timestamp2Type = MySQLColumnType._(mysqlColumnTypeTimestamp2);
   static const dateTime2Type = MySQLColumnType._(mysqlColumnTypeDateTime2);
   static const time2Type = MySQLColumnType._(mysqlColumnTypeTime2);
-
-  /// Novo: JSON
   static const jsonType = MySQLColumnType._(mysqlColumnTypeJson);
-
   static const newDecimalType = MySQLColumnType._(mysqlColumnTypeNewDecimal);
   static const enumType = MySQLColumnType._(mysqlColumnTypeEnum);
   static const setType = MySQLColumnType._(mysqlColumnTypeSet);
@@ -93,38 +77,22 @@ class MySQLColumnType {
   static const stringType = MySQLColumnType._(mysqlColumnTypeString);
   static const geometryType = MySQLColumnType._(mysqlColumnTypeGeometry);
 
-  /// Converte um valor (normalmente lido do MySQL em formato string ou binário)
-  /// para o tipo Dart desejado [T].
-  ///
-  /// [value]: valor lido (pode ser uma string ou Uint8List, dependendo da coluna).
-  /// [columnLength]: (opcional) o tamanho da coluna, usado para decisões de conversão.
-  ///
-  /// Se o valor for nulo, retorna `null`.
-  /// Se [T] for `Uint8List` e o valor já for do tipo `Uint8List`, retorna-o diretamente.
-  /// Se [T] for `String` ou `dynamic`, retorna o valor como está.
-  /// Para tipos numéricos, bool ou DateTime, o método tenta converter a string
-  /// utilizando as funções parse correspondentes.
-  ///
-  /// Lança [MySQLProtocolException] se não for possível converter.
   T? convertStringValueToProvidedType<T>(dynamic value, [int? columnLength]) {
     if (value == null) {
       return null;
     }
 
-    // Se T é Uint8List e o valor já é desse tipo, retorna direto.
     if (T == Uint8List && value is Uint8List) {
       return value as T;
     }
 
-    // Se T é String ou dynamic, retornamos como está.
     if (T == String || T == dynamic) {
       return value as T;
     }
 
-    // Se T é bool e o tipo é TINY(1), convertendo '0' ou '1'.
     if (T == bool) {
       if (_value == mysqlColumnTypeTiny && columnLength == 1) {
-        return int.parse(value) > 0 as T;
+        return (int.parse(value) > 0) as T;
       } else {
         throw MySQLProtocolException(
           "Cannot convert MySQL type $_value to requested type bool",
@@ -132,7 +100,6 @@ class MySQLColumnType {
       }
     }
 
-    // Conversão para int
     if (T == int) {
       switch (_value) {
         case mysqlColumnTypeTiny:
@@ -149,7 +116,6 @@ class MySQLColumnType {
       }
     }
 
-    // Conversão para double
     if (T == double) {
       switch (_value) {
         case mysqlColumnTypeTiny:
@@ -167,7 +133,6 @@ class MySQLColumnType {
       }
     }
 
-    // Conversão para num
     if (T == num) {
       switch (_value) {
         case mysqlColumnTypeTiny:
@@ -185,7 +150,6 @@ class MySQLColumnType {
       }
     }
 
-    // Conversão para DateTime
     if (T == DateTime) {
       switch (_value) {
         case mysqlColumnTypeDate:
@@ -206,116 +170,93 @@ class MySQLColumnType {
     );
   }
 
-  /// Retorna o melhor tipo Dart para representar os dados da coluna, levando
-  /// em consideração o tamanho da coluna ([columnLength]) e o tipo MySQL (_value).
-  ///
-  /// Por exemplo, tipos textuais são mapeados para [String], enquanto tipos BLOB
-  /// são mapeados para [Uint8List]. Alguns tipos numéricos são mapeados para [int]
-  /// ou [double].
   Type getBestMatchDartType(int columnLength) {
     switch (_value) {
-      // Para JSON, definimos como string:
       case mysqlColumnTypeJson:
         return String;
-
-      // Tipos de texto e enumerações → String.
       case mysqlColumnTypeString:
       case mysqlColumnTypeVarString:
       case mysqlColumnTypeVarChar:
       case mysqlColumnTypeEnum:
       case mysqlColumnTypeSet:
         return String;
-
-      // Tipos BLOB → Uint8List.
       case mysqlColumnTypeLongBlob:
       case mysqlColumnTypeMediumBlob:
       case mysqlColumnTypeBlob:
       case mysqlColumnTypeTinyBlob:
         return Uint8List;
-
-      // Outros tipos que preferimos como String (ex.: DECIMAL, BIT, etc.).
       case mysqlColumnTypeGeometry:
       case mysqlColumnTypeBit:
       case mysqlColumnTypeDecimal:
       case mysqlColumnTypeNewDecimal:
         return String;
-
-      // TINY(1) → bool; senão int.
       case mysqlColumnTypeTiny:
         if (columnLength == 1) {
           return bool;
         } else {
           return int;
         }
-
       case mysqlColumnTypeShort:
       case mysqlColumnTypeLong:
       case mysqlColumnTypeLongLong:
       case mysqlColumnTypeInt24:
       case mysqlColumnTypeYear:
         return int;
-
       case mysqlColumnTypeFloat:
       case mysqlColumnTypeDouble:
         return double;
-
       case mysqlColumnTypeDate:
       case mysqlColumnTypeDateTime2:
       case mysqlColumnTypeDateTime:
       case mysqlColumnTypeTimestamp:
       case mysqlColumnTypeTimestamp2:
         return DateTime;
-
       default:
-        // Se não reconhecemos, devolvemos como String.
         return String;
     }
   }
 }
 
-/// Função auxiliar para analisar dados de coluna em formato binário.
-///
-/// [columnType]: O tipo da coluna (valor inteiro representando o tipo MySQL).
-/// [data]: Um [ByteData] que fornece acesso aos bytes do buffer.
-/// [buffer]: O [Uint8List] original contendo os dados.
-/// [startOffset]: A posição inicial no buffer para leitura.
-///
-/// Retorna uma [Tuple2] contendo:
-/// - item1: O valor lido da coluna (geralmente convertido para string ou,
-///   em casos binários, um [Uint8List]).
-/// - item2: O número de bytes consumidos durante a leitura.
-///
-/// Caso o tipo da coluna não seja implementado, lança [MySQLProtocolException].
 Tuple2<dynamic, int> parseBinaryColumnData(
   int columnType,
   ByteData data,
   Uint8List buffer,
-  int startOffset,
-) {
+  int startOffset, {
+  bool isUnsigned = false,
+}) {
   switch (columnType) {
     case mysqlColumnTypeTiny:
       {
-        final value = data.getInt8(startOffset);
+        final value = isUnsigned ? data.getUint8(startOffset) : data.getInt8(startOffset);
         return Tuple2(value.toString(), 1);
       }
 
     case mysqlColumnTypeShort:
       {
-        final value = data.getInt16(startOffset, Endian.little);
+        final value =
+            isUnsigned ? data.getUint16(startOffset, Endian.little) : data.getInt16(startOffset, Endian.little);
         return Tuple2(value.toString(), 2);
       }
 
     case mysqlColumnTypeLong:
     case mysqlColumnTypeInt24:
       {
-        final value = data.getInt32(startOffset, Endian.little);
+        final value =
+            isUnsigned ? data.getUint32(startOffset, Endian.little) : data.getInt32(startOffset, Endian.little);
         return Tuple2(value.toString(), 4);
       }
 
     case mysqlColumnTypeLongLong:
       {
-        final value = data.getInt64(startOffset, Endian.little);
-        return Tuple2(value.toString(), 8);
+        if (isUnsigned) {
+          final low = data.getUint32(startOffset, Endian.little);
+          final high = data.getUint32(startOffset + 4, Endian.little);
+          final bigVal = (BigInt.from(high) << 32) + BigInt.from(low);
+          return Tuple2(bigVal.toString(), 8);
+        } else {
+          final value = data.getInt64(startOffset, Endian.little);
+          return Tuple2(value.toString(), 8);
+        }
       }
 
     case mysqlColumnTypeFloat:
@@ -335,11 +276,9 @@ Tuple2<dynamic, int> parseBinaryColumnData(
     case mysqlColumnTypeTimestamp:
       {
         final initialOffset = startOffset;
-        // Lê o número de bytes (pode ser 0, 4, 7 ou 11)
         final numOfBytes = data.getUint8(startOffset);
         startOffset += 1;
 
-        // Quando numOfBytes == 0, MySQL envia datas/timestamps '0000-00-00 00:00:00'
         if (numOfBytes == 0) {
           return Tuple2("0000-00-00 00:00:00", 1);
         }
@@ -388,7 +327,6 @@ Tuple2<dynamic, int> parseBinaryColumnData(
     case mysqlColumnTypeTime2:
       {
         final initialOffset = startOffset;
-        // Lê o número de bytes (pode ser 0, 8 ou 12)
         final numOfBytes = data.getUint8(startOffset);
         startOffset += 1;
 
@@ -419,6 +357,7 @@ Tuple2<dynamic, int> parseBinaryColumnData(
 
         hours += days * 24;
         final timeResult = StringBuffer();
+
         if (isNegative) {
           timeResult.write("-");
         }
@@ -440,7 +379,6 @@ Tuple2<dynamic, int> parseBinaryColumnData(
     case mysqlColumnTypeEnum:
     case mysqlColumnTypeSet:
       {
-        // Dados textuais length-encoded
         final result = buffer.getUtf8LengthEncodedString(startOffset);
         return Tuple2(result.item1, result.item2);
       }
@@ -449,7 +387,6 @@ Tuple2<dynamic, int> parseBinaryColumnData(
     case mysqlColumnTypeNewDecimal:
       {
         final lengthEncoded = buffer.getLengthEncodedBytes(startOffset);
-        // Valores numéricos vêm como texto no protocolo textual; decodifique em UTF-8.
         final strValue = utf8.decode(lengthEncoded.item1, allowMalformed: true);
         return Tuple2(strValue, lengthEncoded.item2);
       }
@@ -461,14 +398,12 @@ Tuple2<dynamic, int> parseBinaryColumnData(
     case mysqlColumnTypeGeometry:
     case mysqlColumnTypeBit:
       {
-        // Para dados binários, retorna os bytes crus
         final lengthEncoded = buffer.getLengthEncodedBytes(startOffset);
         return Tuple2(lengthEncoded.item1, lengthEncoded.item2);
       }
 
     case mysqlColumnTypeYear:
       {
-        // Lê 2 bytes para YEAR
         final yearValue = data.getUint16(startOffset, Endian.little);
         return Tuple2(yearValue.toString(), 2);
       }
